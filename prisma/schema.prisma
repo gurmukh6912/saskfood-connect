@@ -1,0 +1,290 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model with role-based authentication
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  role          UserRole
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Profile information
+  profile       Profile?
+
+  // Role-specific relationships
+  customer      Customer?
+  driver        Driver?
+  restaurant    Restaurant?
+}
+
+enum UserRole {
+  CUSTOMER
+  DRIVER
+  RESTAURANT_OWNER
+  ADMIN
+}
+
+// Profile information for all users
+model Profile {
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  firstName     String
+  lastName      String
+  phoneNumber   String
+  address       String?
+  city          String?
+  postalCode    String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Customer-specific information
+model Customer {
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  defaultAddress String?
+  savedAddresses Address[]
+  orders        Order[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Saved addresses for customers
+model Address {
+  id            String    @id @default(cuid())
+  customerId    String
+  label         String    // e.g., "Home", "Work"
+  street        String
+  city          String
+  postalCode    String
+  instructions  String?
+  isDefault     Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  customer      Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+}
+
+// Driver-specific information
+model Driver {
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  isOnline      Boolean   @default(false)
+  currentLocation Json?   // Stores lat/long as JSON
+  vehicle       Vehicle?
+  deliveries    Delivery[]
+  bids          DeliveryBid[]
+  earnings      DriverEarning[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Vehicle information for drivers
+model Vehicle {
+  id            String    @id @default(cuid())
+  driverId      String    @unique
+  type          VehicleType
+  make          String
+  model         String
+  year          Int
+  licensePlate  String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  driver        Driver    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+}
+
+enum VehicleType {
+  CAR
+  MOTORCYCLE
+  BICYCLE
+  SCOOTER
+}
+
+// Restaurant information
+model Restaurant {
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  name          String
+  description   String?
+  cuisine       String[]
+  address       String
+  city          String
+  postalCode    String
+  phone         String
+  email         String
+  image         String?
+  rating        Float?
+  isOpen        Boolean   @default(false)
+  openingHours  Json      // Stores opening hours as JSON
+  minimumOrder  Float
+  deliveryFee   Float
+  menuItems     MenuItem[]
+  orders        Order[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Menu items for restaurants
+model MenuItem {
+  id            String    @id @default(cuid())
+  restaurantId  String
+  name          String
+  description   String
+  price         Float
+  image         String?
+  category      String
+  isAvailable   Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orderItems    OrderItem[]
+}
+
+// Orders
+model Order {
+  id            String    @id @default(cuid())
+  customerId    String
+  restaurantId  String
+  items         OrderItem[]
+  subtotal      Float
+  deliveryFee   Float
+  tax           Float
+  total         Float
+  status        OrderStatus
+  deliveryAddress String
+  specialInstructions String?
+  estimatedDeliveryTime DateTime?
+  delivery      Delivery?
+  bids          DeliveryBid[]
+  statusHistory OrderStatusHistory[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  customer      Customer  @relation(fields: [customerId], references: [id])
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id])
+}
+
+// Order items
+model OrderItem {
+  id            String    @id @default(cuid())
+  orderId       String
+  menuItemId    String
+  quantity      Int
+  price         Float
+  specialInstructions String?
+
+  order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem      MenuItem  @relation(fields: [menuItemId], references: [id])
+}
+
+// Order status history
+model OrderStatusHistory {
+  id            String    @id @default(cuid())
+  orderId       String
+  status        OrderStatus
+  note          String?
+  createdAt     DateTime  @default(now())
+
+  order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+// Delivery information
+model Delivery {
+  id            String    @id @default(cuid())
+  orderId       String    @unique
+  driverId      String
+  status        DeliveryStatus
+  pickupTime    DateTime?
+  deliveredTime DateTime?
+  rating        Int?
+  review        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  order         Order     @relation(fields: [orderId], references: [id])
+  driver        Driver    @relation(fields: [driverId], references: [id])
+}
+
+// Delivery bids from drivers
+model DeliveryBid {
+  id            String    @id @default(cuid())
+  orderId       String
+  driverId      String
+  amount        Float
+  estimatedTime Int      // in minutes
+  status        BidStatus
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  order         Order     @relation(fields: [orderId], references: [id])
+  driver        Driver    @relation(fields: [driverId], references: [id])
+}
+
+// Driver earnings
+model DriverEarning {
+  id            String    @id @default(cuid())
+  driverId      String
+  amount        Float
+  type          EarningType
+  description   String?
+  createdAt     DateTime  @default(now())
+
+  driver        Driver    @relation(fields: [driverId], references: [id])
+}
+
+enum OrderStatus {
+  PENDING
+  ACCEPTED
+  PREPARING
+  PREPARED
+  READY_FOR_PICKUP
+  DRIVER_ASSIGNED
+  DRIVER_PICKUP
+  DELIVERING
+  DELIVERED
+  CANCELLED
+}
+
+enum DeliveryStatus {
+  PENDING
+  ACCEPTED
+  PICKED_UP
+  DELIVERING
+  DELIVERED
+  CANCELLED
+}
+
+enum BidStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+enum EarningType {
+  DELIVERY_FEE
+  TIP
+  BONUS
+  OTHER
+}
